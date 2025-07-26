@@ -341,6 +341,7 @@ def test_tinystories_matches_tiktoken():
     with open(corpus_path) as f:
         corpus_contents = f.read()
     reference_ids = reference_tokenizer.encode(corpus_contents, allowed_special={"<|endoftext|>"})
+
     ids = tokenizer.encode(corpus_contents)
     assert ids == reference_ids
 

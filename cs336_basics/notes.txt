@@ -1,2 +1,50 @@
 -propogation bug for same word change'
 - bug on \n\n
+- chunking across tokens
+
+    def encode(self, text: str) -> List[int]:
+        """
+        Encodes an input text into a sequence of token IDs.
+
+        Args:
+            text: The input text (string) to encode.
+
+        Returns:
+            A list of integer token IDs.
+        """
+        result_ids = []
+        # Pass special_tokens to pretokenize_string so it splits on them properly
+        pretokens = pretokenize_string(text, self.special_tokens)
+        
+        # Process each chunk separately to avoid cross-chunk merges
+        for chunk in pretokens:
+            # Start with the raw tokens for this chunk
+            chunk_tokens = []
+            if self.special_tokens is not None and chunk in self.special_tokens:
+                chunk_tokens = [chunk.encode('utf-8')]
+            else:
+                encoded_string = chunk.encode('utf-8')
+                chunk_tokens = [bytes([b]) for b in encoded_string]
+            
+            # Apply merges within this chunk only
+            for merge in self.merges:
+                token1, token2 = merge
+                new_tokens = []
+                i = 0
+                while i < len(chunk_tokens):
+                    if (i < len(chunk_tokens) - 1) and chunk_tokens[i] == token1 and chunk_tokens[i+1] == token2:
+                        new_token = token1 + token2
+                        i += 2
+                    else:
+                        new_token = chunk_tokens[i]
+                        i += 1
+                    new_tokens.append(new_token)
+                chunk_tokens = new_tokens
+            
+            # Convert tokens to IDs for this chunk
+            for token in chunk_tokens:
+                if token in self.reverse_lookup:
+                    result_ids.append(self.reverse_lookup[token])
+    
+        return result_ids
+        

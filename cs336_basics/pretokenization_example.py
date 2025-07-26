@@ -109,29 +109,16 @@ def parallel_pretokenize(file_path:str, num_processes:int = None) -> Dict:
 def pretokenize_string(text: str, special_tokens: List[str] = None) -> List[str]:
     """
     Tokenizes a string into a list of pre-tokens.
-
-    This function first splits the text by the given special tokens, keeping the
-    special tokens themselves as part of the output. Then, it tokenizes the
-    intervening text segments using the pre-tokenization regex pattern.
-
-    Args:
-        text: The input string to tokenize.
-        special_tokens: A list of special tokens to split on. If None, no
-                        special token splitting is performed.
-
-    Returns:
-        A list of token strings.
     """
     if not special_tokens:
-        # If no special tokens are provided, just tokenize the whole text
         return [match.group() for match in re.finditer(PAT, text)]
 
-    # Create a regex pattern to split by special tokens, but keep them as tokens
-    escaped_tokens=[re.escape(token) for token in special_tokens]
-    split_pattern= "("+"|".join(escaped_tokens)+")"
+    # Sort special tokens by length (longest first) to prioritize longer matches
+    sorted_special_tokens = sorted(special_tokens, key=len, reverse=True)
     
-    # Split the text by the special tokens. The result will be like:
-    # ['text before', 'special_token', 'text after', ...]
+    escaped_tokens = [re.escape(token) for token in sorted_special_tokens]
+    split_pattern = "(" + "|".join(escaped_tokens) + ")"
+    
     segments = re.split(split_pattern, text)
 
     output_tokens = []
@@ -139,15 +126,10 @@ def pretokenize_string(text: str, special_tokens: List[str] = None) -> List[str]
         if not segment:
             continue
         if segment in special_tokens:
-            # This is a special token, add it directly to our list
             output_tokens.append(segment)
         else:
-            # This is a regular text segment, tokenize it with PAT
             for match in re.finditer(PAT, segment):
                 output_tokens.append(match.group())
-
-    
-    
     return output_tokens
 
 

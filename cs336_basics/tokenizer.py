@@ -2,8 +2,9 @@ from typing import Dict, List, Tuple, Optional,ClassVar,Iterable,Iterator
 import pickle
 import multiprocessing as mp 
 import sys
-from pretokenization_example import parallel_pretokenize, pretokenize_string
+from cs336_basics.pretokenization_example import parallel_pretokenize, pretokenize_string
 from collections import defaultdict
+import json 
 
 
 
@@ -172,19 +173,47 @@ class Tokenizer:
         
     
     @classmethod
-    def from_files(vocab_filepath: str, merges_filepath: str, special_tokens: List[str] | None = None) -> "Tokenizer":
+    def from_files(cls,vocab_filepath: str, merges_filepath: str, special_tokens: List[str] | None = None) -> "Tokenizer":
         """
         Constructs a Tokenizer from serialized vocabulary and merges files.
 
         Args:
-            vocab_filepath: Path to the serialized vocabulary file (e.g., JSON).
+            vocab_filepath: Path to the serialized vocabulary file (e.g., JSON).(int -> byte)
             merges_filepath: Path to the serialized merges file (e.g., text file).
             special_tokens: An optional list of special tokens (strings) to add to the vocabulary.
 
         Returns:
             A Tokenizer instance.
         """
-        pass
+        with open(vocab_filepath,'r') as f: 
+            vocab_data = json.load(f)
+        vocab={}
+        for key, value in vocab_data.items():
+    
+            token_id = int(key)
+            vocab[token_id] = bytes(value)
+        merges = []
+        with open(merges_filepath, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line:  # Skip empty lines
+                    # Each line should contain two tokens separated by space
+                    parts = line.split(' ', 1)  # Split on first space only
+                    if len(parts) == 2:
+                        token1 = parts[0].encode('utf-8')
+                        token2 = parts[1].encode('utf-8')
+                        merges.append((token1, token2))
+
+        if special_tokens:
+            for token_str in special_tokens:
+                token_bytes = token_str.encode('utf-8')
+                if token_bytes not in [v for v in vocab.values()]:
+                    vocab[len(vocab)] = token_bytes
+        
+        return cls(vocab, merges, special_tokens)
+
+
+    
 
     def encode(self, text: str) -> List[int]:
         """
@@ -196,46 +225,40 @@ class Tokenizer:
         Returns:
             A list of integer token IDs.
         """
-        #
-        tokens_list=[]
-        special_pretokens_list=[]
-        pretokens=pretokenize_string(text)
-        for chunk in pretokens:
-            if chunk in self.special_tokens:
-                special_pretokenized=chunk.encode('utf-8')
-                # special_id=self.reverse_lookup[special_pretokenized]
-                # tokens_list.append(special_id)
-                # special_pretokens_list.append(special_id)
-                tokens_list.append(special_pretokenized)
-                
-            else:
-                encoded_string=chunk.encode('utf-8')
-                list_of_tokens=[bytes([b]) for b in encoded_string]
-                # tokens_list.extend([self.reverse_lookup[x] for x in list_of_tokens])
-                tokens_list.extend(list_of_tokens)
-        #so now this is a big list of bytes
-        for merge in self.merges:
-            
-            token1,token2=merge
-            new_list=[]
-            i=0
-            while (i < len(tokens_list)):
-                if (i< len(tokens_list)-1) and  tokens_list[i]==token1 and tokens_list[i+1]==token2:
-                    new_token=token1+token2
-                    i+=2
-                else:
-                    new_token = tokens_list[i]
-                    i+=1
-                new_list.append(new_token)
-            tokens_list=new_list
-        result=[]
-        for token in tokens_list: 
-            if token in self.reverse_lookup:
-                result.append(self.reverse_lookup[token])
-            else:
-                pass
+        result_ids = []
+        pretokens = pretokenize_string(text, self.special_tokens)
         
-        return result
+        # Process each chunk separately to avoid cross-chunk merges
+        for chunk in pretokens:
+            chunk_tokens = []
+            if self.special_tokens is not None and chunk in self.special_tokens:
+                chunk_tokens = [chunk.encode('utf-8')]
+            else:
+                encoded_string = chunk.encode('utf-8')
+                chunk_tokens = [bytes([b]) for b in encoded_string]
+            
+            #  merges within this chunk only
+            for merge in self.merges:
+                token1, token2 = merge
+                new_tokens = []
+                i = 0
+                while i < len(chunk_tokens):
+                    if (i < len(chunk_tokens) - 1) and chunk_tokens[i] == token1 and chunk_tokens[i+1] == token2:
+                        new_token = token1 + token2
+                        i += 2
+                    else:
+                        new_token = chunk_tokens[i]
+                        i += 1
+                    new_tokens.append(new_token)
+                chunk_tokens = new_tokens
+            
+            # Convert tokens to IDs for this chunk
+            for token in chunk_tokens:
+                if token in self.reverse_lookup:
+                    result_ids.append(self.reverse_lookup[token])
+    
+        return result_ids
+        
         
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
@@ -250,7 +273,12 @@ class Tokenizer:
         Yields:
             Integer token IDs.
         """
-        yield 0  # Placeholder to satisfy the type checker
+        for text in iterable: 
+            token_ids = self.encode(text)
+            for token_id in token_ids:
+                yield token_id
+        
+
 
     def decode(self, ids: List[int]) -> str:
         """
@@ -262,18 +290,15 @@ class Tokenizer:
         Returns:
             The decoded text (string)
         """
-        byte_translation=[]
         replacement_bytes = b'\xef\xbf\xbd'
-
+        all_bytes=b""
         for tok in ids:
             if tok not in self.vocab:
-                byte_translation.append(replacement_bytes)
+                all_bytes += (replacement_bytes)
             else: 
-                byte_translation.append(self.vocab[tok])
-        master_str=""
-        for byte_snippet in byte_translation:
-            master_str+=byte_snippet.decode('utf-8')
-        return master_str
+                all_bytes+= self.vocab[tok]
+        #replacement bytes is the same when you do replace
+        return all_bytes.decode('utf-8',errors="replace")
 if __name__ == '__main__':
     mp.set_start_method('fork', force=True)
     vocab, merges = train_bpe("/Users/ziyadhassan/lms/assignment1/tests/fixtures/tinystories_sample_5M.txt", 500, ['<|endoftext|>'])
