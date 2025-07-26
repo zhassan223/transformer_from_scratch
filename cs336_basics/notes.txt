@@ -1,0 +1,2 @@
+-propogation bug for same word change'
+- bug on \n\n

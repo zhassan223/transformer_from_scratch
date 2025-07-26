@@ -1,8 +1,9 @@
 import os
-from typing import BinaryIO,Dict
-import multiprocessing as mp 
+from typing import BinaryIO, Dict, List
+import multiprocessing as mp
 from collections import defaultdict
 import regex as re
+
 PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""
 
 
@@ -66,8 +67,6 @@ def process_chunk(args):
 
         special_tokens=[split_special_token.decode('utf-8',errors='ignore')]
 
-
-
         #prob dont need a list
         escaped_tokens=[re.escape(token) for token in special_tokens]
         split_vocab="|".join(escaped_tokens)
@@ -82,8 +81,8 @@ def process_chunk(args):
                 for match in re.finditer(PAT,segment):
                     #get the word
                     token=match.group()
-                    if token.strip():
-                        token_counts[token]+=1
+                    # if token.strip():
+                    token_counts[token]+=1
         return dict(token_counts)
 def parallel_pretokenize(file_path:str, num_processes:int = None) -> Dict:
     '''parallel preokenization and return tem merged token counts'''
@@ -107,15 +106,59 @@ def parallel_pretokenize(file_path:str, num_processes:int = None) -> Dict:
     return dict(final_counts)
 
          
+def pretokenize_string(text: str, special_tokens: List[str] = None) -> List[str]:
+    """
+    Tokenizes a string into a list of pre-tokens.
+
+    This function first splits the text by the given special tokens, keeping the
+    special tokens themselves as part of the output. Then, it tokenizes the
+    intervening text segments using the pre-tokenization regex pattern.
+
+    Args:
+        text: The input string to tokenize.
+        special_tokens: A list of special tokens to split on. If None, no
+                        special token splitting is performed.
+
+    Returns:
+        A list of token strings.
+    """
+    if not special_tokens:
+        # If no special tokens are provided, just tokenize the whole text
+        return [match.group() for match in re.finditer(PAT, text)]
+
+    # Create a regex pattern to split by special tokens, but keep them as tokens
+    escaped_tokens=[re.escape(token) for token in special_tokens]
+    split_pattern= "("+"|".join(escaped_tokens)+")"
+    
+    # Split the text by the special tokens. The result will be like:
+    # ['text before', 'special_token', 'text after', ...]
+    segments = re.split(split_pattern, text)
+
+    output_tokens = []
+    for segment in segments:
+        if not segment:
+            continue
+        if segment in special_tokens:
+            # This is a special token, add it directly to our list
+            output_tokens.append(segment)
+        else:
+            # This is a regular text segment, tokenize it with PAT
+            for match in re.finditer(PAT, segment):
+                output_tokens.append(match.group())
+
+    
+    
+    return output_tokens
 
 
 
 
 ## 
 if __name__ == '__main__':
-    mp.set_start_method('fork',force=True)
+    # mp.set_start_method('fork',force=True)
 
-    token_counts=parallel_pretokenize("./data/TinyStoriesV2-GPT4-train.txt", num_processes=8)
-    print(mp.cpu_count())
+    # token_counts=parallel_pretokenize("/Users/ziyadhassan/lms/assignment1/tests/fixtures/tinystories_sample_5M.txt", num_processes=8)
+    print(pretokenize_string("hey world <|endoftext|> this is ziyadn't ",["<|endoftext|>"]))
+    # print(os.getcwd())
 
         # Run pre-tokenization on your chunk and store the counts for each pre-token

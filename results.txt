@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.1, pytest-8.3.5, pluggy-1.5.0
+rootdir: /Users/ziyadhassan/lms/assignment1
+configfile: pyproject.toml
+plugins: jaxtyping-0.3.1
+collected 48 items / 45 deselected / 3 selected
+
+tests/test_train_bpe.py::test_train_bpe_speed PASSED
+tests/test_train_bpe.py::test_train_bpe PASSED
+tests/test_train_bpe.py::test_train_bpe_special_tokens PASSED
+
+======================= 3 passed, 45 deselected in 3.15s =======================
