@@ -13,9 +13,9 @@ class Linear(nn.Module):
             device: torch.device | None = None Device to store the parameters on
             dtype: torch.dtype | None = None Data type of the parameters
         """
-        super().__init__() # Call the superclass constructor
+        super().__init__() #
         self.W = nn.Parameter(torch.empty(in_features, out_features, device=device, dtype=dtype))
-        nn.init.trunc_normal_(self.W, mean=0.0, std=2/(in_features+out_features), a=-3.0, b=3.0) # Initialize weights
+        nn.init.trunc_normal_(self.W, mean=0.0, std=2/(in_features+out_features), a=-3.0, b=3.0) 
 
 
 
