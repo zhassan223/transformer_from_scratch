@@ -16,6 +16,8 @@ from cs336_basics.rmsnorm import RMSNorm
 from cs336_basics.positionwise_ffn import PositionwiseFFN
 from cs336_basics.RotaryPositionsEmbedding import RotaryPositionalEmbedding
 from cs336_basics.softmax import softmax
+from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
+from cs336_basics.multihead_self_attention import CausalMultiHeadSelfAttention
 
 
 
@@ -110,7 +112,7 @@ def run_scaled_dot_product_attention(
     Returns:
         Float[Tensor, " ... queries d_v"]: Output of SDPA
     """
-    raise NotImplementedError
+    return scaled_dot_product_attention(Q,K,V,mask=mask)
 
 
 def run_multihead_self_attention(
@@ -133,7 +135,6 @@ def run_multihead_self_attention(
     Args:
         d_model (int): Dimensionality of the feedforward input and output.
         num_heads (int): Number of heads to use in multi-headed attention.
-        max_seq_len (int): Maximum sequence length to pre-cache if your implementation does that.
         q_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the Q projection
         k_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the K projection
         v_proj_weight (Float[Tensor, "d_k d_in"]): Weights for the V projection
@@ -144,7 +145,19 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    mha=CausalMultiHeadSelfAttention(d_model,num_heads)
+    
+    state_dict = {
+        'q_proj.W': q_proj_weight.T,
+        'k_proj.W': k_proj_weight.T,
+        'v_proj.W': v_proj_weight.T,
+        'o_proj.W':o_proj_weight.T
+    }
+    mha.load_state_dict(state_dict)
+
+    return mha(in_features)
+
+    
 
 
 def run_multihead_self_attention_with_rope(
@@ -184,7 +197,19 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
+    d_k=d_model//num_heads
+    rope=RotaryPositionalEmbedding(theta,d_k,max_seq_len)
+    mha=CausalMultiHeadSelfAttention(d_model,num_heads,rope=rope,token_positions=token_positions)
+    
+    state_dict = {
+        'q_proj.W': q_proj_weight.T,
+        'k_proj.W': k_proj_weight.T,
+        'v_proj.W': v_proj_weight.T,
+        'o_proj.W':o_proj_weight.T
+    }
+    mha.load_state_dict(state_dict)
+
+    return mha(in_features)
 
 
 def run_rope(
