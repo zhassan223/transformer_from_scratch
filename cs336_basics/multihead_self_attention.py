@@ -4,7 +4,7 @@ from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attenti
 from cs336_basics.RotaryPositionsEmbedding import RotaryPositionalEmbedding
 from cs336_basics.Linear import Linear
 class CausalMultiHeadSelfAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int,rope:RotaryPositionalEmbedding = None, token_positions = None ):
+    def __init__(self, d_model: int, num_heads: int,rope:RotaryPositionalEmbedding = None):
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
@@ -16,11 +16,10 @@ class CausalMultiHeadSelfAttention(nn.Module):
         self.v_proj=Linear(d_model,d_model)
         self.o_proj=Linear(d_model,d_model)
         self.rope=rope
-        self.token_positions=token_positions
 
 
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor,token_positions:torch.Tensor = None ) -> torch.Tensor:
         batch_size,seq_len,_=x.shape
         # Implement the forward pass for causal multi-head self-attention
 
@@ -36,10 +35,10 @@ class CausalMultiHeadSelfAttention(nn.Module):
         v = v.view(batch_size, seq_len, self.num_heads, self.d_k).transpose(1, 2)
 
 
-        if self.rope is not None  and self.token_positions is not None:
+        if self.rope is not None and token_positions is not None:
             
-            q=self.rope(q,self.token_positions)
-            k=self.rope(k,self.token_positions)
+            q=self.rope(q,token_positions)
+            k=self.rope(k,token_positions)
 
         # 3. Create causal (look-ahead) mask
         # Mask is (S, S), True for positions to keep (j <= i)

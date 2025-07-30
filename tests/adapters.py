@@ -18,6 +18,8 @@ from cs336_basics.RotaryPositionsEmbedding import RotaryPositionalEmbedding
 from cs336_basics.softmax import softmax
 from cs336_basics.scaled_dot_product_attention import scaled_dot_product_attention
 from cs336_basics.multihead_self_attention import CausalMultiHeadSelfAttention
+from cs336_basics.transformer_block import TransformerBlock
+from cs336_basics.transformer_lm import TransformerLM
 
 
 
@@ -199,7 +201,7 @@ def run_multihead_self_attention_with_rope(
     """
     d_k=d_model//num_heads
     rope=RotaryPositionalEmbedding(theta,d_k,max_seq_len)
-    mha=CausalMultiHeadSelfAttention(d_model,num_heads,rope=rope,token_positions=token_positions)
+    mha=CausalMultiHeadSelfAttention(d_model,num_heads,rope=rope)
     
     state_dict = {
         'q_proj.W': q_proj_weight.T,
@@ -209,7 +211,7 @@ def run_multihead_self_attention_with_rope(
     }
     mha.load_state_dict(state_dict)
 
-    return mha(in_features)
+    return mha(in_features,token_positions)
 
 
 def run_rope(
@@ -306,7 +308,36 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    # 1. Instantiate your TransformerBlock
+    block = TransformerBlock(
+        d_model=d_model,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        max_seq_len=max_seq_len
+        # Note: The test provides theta, but your block likely hardcodes it.
+        # If not, you would pass it here.
+    )
+
+    # 2. Create the state_dict to load the weights
+    # The keys must match the names of your modules (e.g., 'attn_norm', 'mha', 'ffn')
+    # and the parameter names within them (e.g., 'weight', 'W').
+    # Linear layer weights must be transposed (.T).
+    state_dict = {
+        'attn_norm.weight': weights['ln1.weight'],
+        'ff_norm.weight': weights['ln2.weight'],
+        'mha.q_proj.W': weights['attn.q_proj.weight'].T,
+        'mha.k_proj.W': weights['attn.k_proj.weight'].T,
+        'mha.v_proj.W': weights['attn.v_proj.weight'].T,
+        'mha.o_proj.W': weights['attn.output_proj.weight'].T,
+        'ffn.w1.W': weights['ffn.w1.weight'].T,
+        'ffn.w2.W': weights['ffn.w2.weight'].T,
+        'ffn.w3.W': weights['ffn.w3.weight'].T,
+    }
+
+    # 3. Load the weights into your model
+    block.load_state_dict(state_dict)
+
+    return block(in_features)
 
 
 def run_transformer_lm(
@@ -388,7 +419,39 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    model = TransformerLM(
+        vocab_size=vocab_size,
+        context_length=context_length,
+        d_model=d_model,
+        num_layers=num_layers,
+        num_heads=num_heads,
+        d_ff=d_ff,
+        rope_theta=rope_theta
+    )
+
+    state_dict = {
+        'embedding.embedding_matrix': weights['token_embeddings.weight'],
+        'ln_final.weight': weights['ln_final.weight'],
+        'lm_head.W': weights['lm_head.weight'].T,
+    }
+
+    for i in range(num_layers):
+        state_dict.update({
+            f'layers.{i}.attn_norm.weight': weights[f'layers.{i}.ln1.weight'],
+            f'layers.{i}.ff_norm.weight': weights[f'layers.{i}.ln2.weight'],
+            f'layers.{i}.mha.q_proj.W': weights[f'layers.{i}.attn.q_proj.weight'].T,
+            f'layers.{i}.mha.k_proj.W': weights[f'layers.{i}.attn.k_proj.weight'].T,
+            f'layers.{i}.mha.v_proj.W': weights[f'layers.{i}.attn.v_proj.weight'].T,
+            f'layers.{i}.mha.o_proj.W': weights[f'layers.{i}.attn.output_proj.weight'].T,
+            f'layers.{i}.ffn.w1.W': weights[f'layers.{i}.ffn.w1.weight'].T,
+            f'layers.{i}.ffn.w2.W': weights[f'layers.{i}.ffn.w2.weight'].T,
+            f'layers.{i}.ffn.w3.W': weights[f'layers.{i}.ffn.w3.weight'].T,
+        })
+
+    model.load_state_dict(state_dict)
+
+    return model(in_indices)
+
 
 
 def run_rmsnorm(
